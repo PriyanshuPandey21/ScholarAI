@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import api from '../api.js';
 
 const AuthContext = createContext(null);
 
@@ -16,7 +17,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const fetchUser = async () => {
       if (!token) { setLoading(false); return; }
-      try { const { data } = await axios.get('/auth/me'); setUser(data.user); }
+      try { const { data } = await api.get('/auth/me'); setUser(data.user); }
       catch { localStorage.removeItem('scholarai_token'); setToken(null); setUser(null); }
       finally { setLoading(false); }
     };
