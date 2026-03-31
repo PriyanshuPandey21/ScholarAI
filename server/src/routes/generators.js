@@ -1,32 +1,13 @@
 import express from 'express';
-import { GoogleGenAI } from '@google/genai';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import fs from 'fs';
 import { protect } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import History from '../models/History.js';
+import { callGeminiJSON } from '../utils/geminiClient.js';
 
 const router = express.Router();
-
-// Helper to call Gemini and parse JSON safely
-const generateGenAIParsed = async (prompt, systemInstruction = '') => {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey || geminiKey === 'your_gemini_api_key_here') throw new Error('GEMINI_API_KEY is required');
-  const ai = new GoogleGenAI({ apiKey: geminiKey });
-  
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: { temperature: 0.3, systemInstruction }
-  });
-  
-  let resultJsonStr = response.text.trim();
-  if (resultJsonStr.startsWith('\`\`\`json')) resultJsonStr = resultJsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-  else if (resultJsonStr.startsWith('\`\`\`')) resultJsonStr = resultJsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
-  
-  return JSON.parse(resultJsonStr);
-};
 
 // Tool 1: Notes Generator
 router.post('/notes', protect, upload.single('file'), async (req, res) => {
@@ -63,7 +44,7 @@ Return raw JSON strictly matching this structure:
   "keyTerms": ["<term 1>"]
 }`;
 
-    const parsed = await generateGenAIParsed(prompt);
+    const parsed = await callGeminiJSON(prompt, { temperature: 0.3 });
     await History.create({ userId: req.user._id, toolUsed: 'Notes Generator', inputSummary: topic || 'Custom Text', resultSummary: 'Generated Notes' });
     res.json(parsed);
   } catch (err) {
@@ -88,7 +69,7 @@ Return raw JSON strictly matching this structure:
   ]
 }`;
 
-    const parsed = await generateGenAIParsed(prompt);
+    const parsed = await callGeminiJSON(prompt, { temperature: 0.4 });
     await History.create({ userId: req.user._id, toolUsed: 'Flashcard Generator', inputSummary: topic || 'Text', resultSummary: `Generated ${parsed.flashcards?.length} flashcards` });
     res.json(parsed.flashcards || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -108,14 +89,14 @@ Format as strict raw JSON:
   "questions": [
     {
       "q": "<Question Text>",
-      "options": ["A", "B", "C", "D"], // only needed if MCQ, omit or empty array if short answer
+      "options": ["A", "B", "C", "D"],
       "correct": "<Full text of the correct answer>",
       "explanation": "<Why this is correct>"
     }
   ]
 }`;
 
-    const parsed = await generateGenAIParsed(prompt);
+    const parsed = await callGeminiJSON(prompt, { temperature: 0.4 });
     await History.create({ userId: req.user._id, toolUsed: 'Quiz Generator', inputSummary: topic || 'Text', resultSummary: `Generated ${parsed.questions?.length} quiz questions` });
     res.json(parsed.questions || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -139,7 +120,7 @@ Format as strict raw JSON:
   "bestPractice": "<one best practice suggestion>"
 }`;
 
-    const parsed = await generateGenAIParsed(prompt);
+    const parsed = await callGeminiJSON(prompt, { temperature: 0.2 });
     await History.create({ userId: req.user._id, toolUsed: 'Code Debugger', inputSummary: language, resultSummary: 'Debugged Code' });
     res.json(parsed);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -163,7 +144,7 @@ Format as strict raw JSON:
   ]
 }`;
 
-    const parsed = await generateGenAIParsed(prompt);
+    const parsed = await callGeminiJSON(prompt, { temperature: 0.5 });
     await History.create({ userId: req.user._id, toolUsed: 'Interview Prep', inputSummary: role, resultSummary: `Generated ${parsed.questions?.length} questions` });
     res.json(parsed.questions || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -186,7 +167,7 @@ Format as strict raw JSON:
   ]
 }`;
 
-    const parsed = await generateGenAIParsed(prompt);
+    const parsed = await callGeminiJSON(prompt, { temperature: 0.5 });
     await History.create({ userId: req.user._id, toolUsed: 'Presentation Gen', inputSummary: topic, resultSummary: `Generated ${parsed.slides?.length} slides` });
     res.json(parsed.slides || []);
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -1,12 +1,12 @@
 import express from 'express';
 import axios from 'axios';
-import { GoogleGenAI } from '@google/genai';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import fs from 'fs';
 import { protect } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import History from '../models/History.js';
+import { callGemini, callGeminiJSON } from '../utils/geminiClient.js';
 
 const router = express.Router();
 
@@ -29,26 +29,12 @@ router.post('/citation', protect, async (req, res) => {
     const { topic, url } = req.body;
     if (!topic && !url) return res.status(400).json({ error: 'Topic or URL required' });
     const input = url || topic;
-    const geminiKey = process.env.GEMINI_API_KEY;
-    let citation = '';
-    if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
-      try {
-        const ai = new GoogleGenAI({ apiKey: geminiKey });
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: input,
-          config: {
-            systemInstruction: 'Generate APA, MLA, and IEEE citations for the given topic or URL. Format as APA:, MLA:, IEEE: on separate lines.',
-            temperature: 0.3
-          }
-        });
-        citation = response.text;
-      } catch (apiErr) {
-        return res.status(500).json({ error: apiErr.message || 'Gemini API failed' });
-      }
-    } else {
-      citation = `APA: Author, A. (${new Date().getFullYear()}). ${input}. Publisher.\n\nMLA: Author. "${input}." Publisher, ${new Date().getFullYear()}.\n\nIEEE: A. Author, "${input}," Publisher, ${new Date().getFullYear()}.\n\n[Add GEMINI_API_KEY for intelligent citations]`;
-    }
+
+    const citation = await callGemini(input, {
+      systemInstruction: 'Generate APA, MLA, and IEEE citations for the given topic or URL. Format as APA:, MLA:, IEEE: on separate lines.',
+      temperature: 0.3,
+    });
+
     await History.create({ userId: req.user._id, toolUsed: 'Citation Generator', inputSummary: input.substring(0, 100), resultSummary: citation.substring(0, 100) });
     res.json({ citation });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -59,26 +45,12 @@ router.post('/summarize', protect, upload.single('file'), async (req, res) => {
     let text = req.body.text || '';
     if (req.file) { text = (await pdfParse(fs.readFileSync(req.file.path))).text; fs.unlinkSync(req.file.path); }
     if (!text.trim()) return res.status(400).json({ error: 'No text provided' });
-    const geminiKey = process.env.GEMINI_API_KEY;
-    let summary = '';
-    if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
-      try {
-        const ai = new GoogleGenAI({ apiKey: geminiKey });
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: text.substring(0, 8000),
-          config: {
-            systemInstruction: 'Generate a concise 150-word academic abstract covering objective, methods, results, and conclusion. Return ONLY the abstract.',
-            temperature: 0.5
-          }
-        });
-        summary = response.text;
-      } catch (apiErr) {
-        return res.status(500).json({ error: apiErr.message || 'Gemini API failed' });
-      }
-    } else {
-      summary = text.split(/[.!?]+/).filter(s => s.trim().length > 20).slice(0, 5).join('. ') + '.\n\n[Add GEMINI_API_KEY for AI summaries]';
-    }
+
+    const summary = await callGemini(text.substring(0, 8000), {
+      systemInstruction: 'Generate a concise 150-word academic abstract covering objective, methods, results, and conclusion. Return ONLY the abstract.',
+      temperature: 0.5,
+    });
+
     await History.create({ userId: req.user._id, toolUsed: 'Abstract Summarizer', inputSummary: text.substring(0, 100), resultSummary: summary.substring(0, 100) });
     res.json({ summary });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -113,7 +85,6 @@ router.get('/papers', protect, async (req, res) => {
       total = data.total || 0;
     } catch (apiErr) {
       if (apiErr.response?.status === 429 || apiErr.response?.status === 403) {
-        // Fallback to CrossRef API if Semantic Scholar rate limits us
         const crUrl = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&select=title,author,issued,abstract,URL,is-referenced-by-count&rows=${limit}`;
         const { data } = await axios.get(crUrl);
         total = data.message['total-results'] || 0;
@@ -143,24 +114,16 @@ router.post('/ats', protect, upload.single('file'), async (req, res) => {
     let text = '';
     
     if (req.file.originalname.endsWith('.pdf')) {
-      const data = await pdfParse(fs.readFileSync(req.file.path));
-      text = data.text;
+      text = (await pdfParse(fs.readFileSync(req.file.path))).text;
     } else if (req.file.originalname.endsWith('.docx')) {
-      const data = await mammoth.extractRawText({ path: req.file.path });
-      text = data.value;
+      text = (await mammoth.extractRawText({ path: req.file.path })).value;
     } else {
       text = fs.readFileSync(req.file.path, 'utf8');
     }
     fs.unlinkSync(req.file.path);
     
     if (!text.trim()) return res.status(400).json({ error: 'Failed to extract text from file' });
-    
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey || geminiKey === 'your_gemini_api_key_here') {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is required for ATS Checker' });
-    }
 
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
     const prompt = `Assess this resume for ATS compatibility. ${jobDescription ? 'Compare it against the provided Job Description.' : 'Perform a general ATS and resume best-practices check.'}
     
 Resume:
@@ -177,20 +140,7 @@ You MUST return a raw JSON object with NO markdown formatting, NO backticks, and
   "recommendations": ["<recommendation1>"]
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { temperature: 0.2 }
-    });
-    
-    let resultJsonStr = response.text.trim();
-    if (resultJsonStr.startsWith('\`\`\`json')) {
-      resultJsonStr = resultJsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (resultJsonStr.startsWith('\`\`\`')) {
-      resultJsonStr = resultJsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-    
-    const result = JSON.parse(resultJsonStr);
+    const result = await callGeminiJSON(prompt, { temperature: 0.2 });
     await History.create({ userId: req.user._id, toolUsed: 'ATS Checker', inputSummary: req.file.originalname, resultSummary: `Score: ${result.score}%` });
     res.json(result);
   } catch (err) {

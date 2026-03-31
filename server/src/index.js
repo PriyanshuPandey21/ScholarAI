@@ -20,6 +20,7 @@ import toolsRoutes from './routes/tools.js';
 import plannerRoutes from './routes/planner.js';
 import historyRoutes from './routes/history.js';
 import generatorsRoutes from './routes/generators.js';
+import { getKeyStats, totalKeys } from './utils/geminiClient.js';
 
 import './config/passport.js';
 
@@ -49,6 +50,13 @@ app.use('/api/history', historyRoutes);
 app.use('/api/generators', generatorsRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/ai-status', (req, res) => {
+  res.json({
+    totalKeys,
+    keys: getKeyStats(),
+    note: 'Key values are never exposed — only stats are shown here.'
+  });
+});
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/scholarai')
   .then(() => {
