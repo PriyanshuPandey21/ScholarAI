@@ -12,6 +12,7 @@
     "@google/genai": "^1.47.0",
     "axios": "^1.6.7",
     "bcryptjs": "^2.4.3",
+    "connect-mongo": "^6.0.0",
     "cors": "^2.8.5",
     "docx": "^8.5.0",
     "dotenv": "^16.4.1",
