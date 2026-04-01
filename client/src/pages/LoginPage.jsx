@@ -6,8 +6,10 @@ import { useAuth } from '../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || '';
 
 export default function LoginPage() {
-  const { isAuthenticated } = useAuth();
-  if (isAuthenticated) return <Navigate to="/app" replace />;
+  const { isAuthenticated, authReady } = useAuth();
+  // Wait for the auth check to complete before deciding to redirect.
+  // Without this, a refresh on /login could flash briefly even when logged in.
+  if (authReady && isAuthenticated) return <Navigate to="/app" replace />;
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">

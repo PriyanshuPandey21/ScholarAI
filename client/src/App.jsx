@@ -29,9 +29,19 @@ import InterviewPrep from './pages/tools/InterviewPrep';
 import PresentationGenerator from './pages/tools/PresentationGenerator';
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
+  // Render a spinner until the initial /auth/me check has completed.
+  // Without this guard, a page refresh would redirect to /login before
+  // the token is validated, even when the user is genuinely authenticated.
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-400">Loading…</p>
+      </div>
+    );
+  }
   return isAuthenticated ? children : <Navigate to="/login" state={{ from: location }} replace />;
 }
 
