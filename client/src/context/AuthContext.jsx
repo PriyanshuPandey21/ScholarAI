@@ -8,7 +8,7 @@ const AuthContext = createContext(null);
 // so it is present on the very first request (avoids the useEffect timing gap).
 const storedToken = localStorage.getItem('scholarai_token');
 if (storedToken) {
-  axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+  api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
 }
 
 export function AuthProvider({ children }) {
@@ -21,9 +21,9 @@ export function AuthProvider({ children }) {
   // Keep Axios header in sync whenever token changes after mount.
   useEffect(() => {
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     } else {
-      delete axios.defaults.headers.common['Authorization'];
+      delete api.defaults.headers.common['Authorization'];
     }
   }, [token]);
 
@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
           localStorage.removeItem('scholarai_token');
           setToken(null);
           setUser(null);
-          delete axios.defaults.headers.common['Authorization'];
+          delete api.defaults.headers.common['Authorization'];
         }
       } finally {
         setAuthReady(true);
@@ -57,13 +57,13 @@ export function AuthProvider({ children }) {
     localStorage.setItem('scholarai_token', newToken);
     // Set Axios header synchronously here too so any request fired
     // immediately after login() already has the auth header.
-    axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+    api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     setToken(newToken);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('scholarai_token');
-    delete axios.defaults.headers.common['Authorization'];
+    delete api.defaults.headers.common['Authorization'];
     setToken(null);
     setUser(null);
   }, []);
