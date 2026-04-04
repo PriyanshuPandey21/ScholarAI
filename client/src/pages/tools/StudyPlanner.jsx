@@ -14,7 +14,7 @@ export default function StudyPlanner() {
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState("all");
   useEffect(() => {
-    axios
+    api
       .get("/api/planner")
       .then((r) => setItems(r.data))
       .catch(() => {})

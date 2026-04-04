@@ -38,7 +38,7 @@ export default function QuizGenerator() {
     setCurrentIndex(0);
 
     try {
-      const { data } = await api.post("/api/generators/quiz", {
+      const { data } = await axios.post("/api/generators/quiz", {
         text,
         topic,
         count,
