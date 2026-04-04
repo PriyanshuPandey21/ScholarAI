@@ -1,14 +1,20 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-import api from '../api.js';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import api from "../../api";
+import api from "../api.js";
 
 const AuthContext = createContext(null);
 
 // Synchronously initialize the Axios Authorization header from localStorage
 // so it is present on the very first request (avoids the useEffect timing gap).
-const storedToken = localStorage.getItem('scholarai_token');
+const storedToken = localStorage.getItem("scholarai_token");
 if (storedToken) {
-  api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+  api.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
 }
 
 export function AuthProvider({ children }) {
@@ -21,9 +27,9 @@ export function AuthProvider({ children }) {
   // Keep Axios header in sync whenever token changes after mount.
   useEffect(() => {
     if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     } else {
-      delete api.defaults.headers.common['Authorization'];
+      delete api.defaults.headers.common["Authorization"];
     }
   }, [token]);
 
@@ -35,16 +41,16 @@ export function AuthProvider({ children }) {
         return;
       }
       try {
-        const { data } = await api.get('/auth/me');
+        const { data } = await api.get("/auth/me");
         setUser(data.user);
       } catch (err) {
         // Only invalidate the token on a definitive 401 Unauthorized.
         // Network errors or 5xx responses must NOT log the user out.
         if (err.response?.status === 401) {
-          localStorage.removeItem('scholarai_token');
+          localStorage.removeItem("scholarai_token");
           setToken(null);
           setUser(null);
-          delete api.defaults.headers.common['Authorization'];
+          delete api.defaults.headers.common["Authorization"];
         }
       } finally {
         setAuthReady(true);
@@ -54,16 +60,16 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const login = useCallback((newToken) => {
-    localStorage.setItem('scholarai_token', newToken);
+    localStorage.setItem("scholarai_token", newToken);
     // Set Axios header synchronously here too so any request fired
     // immediately after login() already has the auth header.
-    api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+    api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
     setToken(newToken);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('scholarai_token');
-    delete api.defaults.headers.common['Authorization'];
+    localStorage.removeItem("scholarai_token");
+    delete api.defaults.headers.common["Authorization"];
     setToken(null);
     setUser(null);
   }, []);
@@ -80,15 +86,11 @@ export function AuthProvider({ children }) {
     logout,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 };
